@@ -1,6 +1,6 @@
 """
 📚 Писалка-читалка - PYQT6 EDITION
-Версия: 1.0
+Версия: 1.1
 """
 
 import sys
@@ -16,6 +16,7 @@ from zipfile import ZipFile
 import xml.etree.ElementTree as ET
 import xml.dom.minidom
 import base64
+import ctypes
 
 # === PyQt6 импорты ===
 from PyQt6.QtWidgets import *
@@ -23,6 +24,63 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 from PyQt6.QtCore import pyqtSignal
+
+
+def resource_path(relative_path):
+    """Получить абсолютный путь к ресурсу"""
+    try:
+        # PyInstaller
+        base_path = sys._MEIPASS
+    except AttributeError:
+        try:
+            # Nuitka
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        except NameError:
+            # Обычный запуск
+            base_path = os.path.abspath(".")
+
+    full_path = os.path.join(base_path, relative_path)
+
+    # Отладка
+    print(
+        f"DEBUG resource_path: base={base_path}, relative={relative_path}, full={full_path}, exists={os.path.exists(full_path)}")
+
+    return full_path
+
+
+# Глобальная переменная для пути к иконке
+ICON_PATH = None
+
+
+def find_icon():
+    """Поиск иконки в разных местах"""
+    global ICON_PATH
+
+    # Возможные пути к иконке (используем resource_path!)
+    possible_paths = [
+        resource_path("icon.ico"),  # Основной способ через resource_path
+        "icon.ico",  # Текущая директория
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico"),  # Рядом со скриптом
+        os.path.join(os.path.dirname(sys.executable), "icon.ico"),  # Рядом с exe
+    ]
+
+    # Добавляем PyInstaller путь если есть
+    if hasattr(sys, '_MEIPASS'):
+        possible_paths.append(os.path.join(sys._MEIPASS, "icon.ico"))
+
+    for path in possible_paths:
+        if path and os.path.exists(path):
+            ICON_PATH = path
+            print(f"DEBUG: Icon found at: {path}")
+            return path
+
+    print("DEBUG: Icon NOT FOUND in any location!")
+    print(f"DEBUG: Searched paths: {possible_paths}")
+    return None
+
+
+# Ищем иконку сразу
+find_icon()
 
 # === Обработчик исключений ===
 def excepthook(exc_type, exc_value, exc_traceback):
@@ -1484,6 +1542,11 @@ class MainWindow(QMainWindow):
         self.current_project: Optional[Project] = None
         self.editors = {}  # chapter_id -> editor widget
         self.settings = Settings()
+        if ICON_PATH and os.path.exists(ICON_PATH):
+            self.setWindowIcon(QIcon(ICON_PATH))
+        icon_path = resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         Config.init_dirs()
 
@@ -2634,7 +2697,51 @@ if __name__ == '__main__':
     app.setApplicationName("Читалка-писалка Pro")
     app.setOrganizationName("ChitalkaPisalka")
 
-    window = MainWindow()
-    window.show()
+    # === УСТАНОВКА ИКОНКИ ===
+    icon_loaded = False
 
+    # Способ 1: Используем найденный путь
+    if ICON_PATH and os.path.exists(ICON_PATH):
+        app.setWindowIcon(QIcon(ICON_PATH))
+        icon_loaded = True
+        print(f"DEBUG: Icon loaded from ICON_PATH: {ICON_PATH}")
+
+    # Способ 2: Пробуем загрузить из ресурсов Qt
+    if not icon_loaded:
+        try:
+            icon = QIcon(":/icon.ico")  # Qt resource system
+            if not icon.isNull():
+                app.setWindowIcon(icon)
+                icon_loaded = True
+                print("DEBUG: Icon loaded from Qt resources")
+        except:
+            pass
+
+    # Способ 3: Пробуем из текущей директории
+    if not icon_loaded:
+        local_icon = os.path.join(os.getcwd(), "icon.ico")
+        if os.path.exists(local_icon):
+            app.setWindowIcon(QIcon(local_icon))
+            icon_loaded = True
+            print(f"DEBUG: Icon loaded from current dir: {local_icon}")
+
+    # Для Windows: устанавливаем ID приложения
+    if sys.platform == 'win32':
+        try:
+            myappid = 'chitalkapisalka.pro.writer.1.0'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+            print("DEBUG: AppUserModelID set")
+        except Exception as e:
+            print(f"DEBUG: Failed to set AppUserModelID: {e}")
+
+    if not icon_loaded:
+        print("DEBUG: WARNING - Icon not loaded!")
+
+    window = MainWindow()
+
+    # Устанавливаем иконку для окна ещё раз
+    if icon_loaded and ICON_PATH:
+        window.setWindowIcon(QIcon(ICON_PATH))
+
+    window.show()
     sys.exit(app.exec())
