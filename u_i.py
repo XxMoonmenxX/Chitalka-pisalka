@@ -1080,7 +1080,7 @@ class MainWindow(QMainWindow):
         self.search_engine = None
 
         # Инициализация проверки обновлений
-        self.updater = UpdateChecker("1.3")
+        self.updater = UpdateChecker("1.2")
         self.updater.update_found.connect(self._on_update_available)
         # Запускаем в фоне
         QTimer.singleShot(3000, self.updater.check_async)
